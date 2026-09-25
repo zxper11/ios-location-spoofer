@@ -76,45 +76,37 @@ jobs:
                   new_lines.append(line)
 
               with open("location-spoofer.xcodeproj/project.pbxproj", "w") as f:
-                  f.write("\n".join(new_lines))
+                f.write("\n".join(new_lines))
               print("HACKS.md patch applied")
           else:
               print("WARNING: libgolocationspoofer.a build ref not found, skipping patch")
           PYEOF
 
-      - name: Build archive (Unsigned for Sideloading)
+      - name: Build App (Unsigned for Sideloading)
         run: |
-          xcodebuild archive \
+          xcodebuild build \
             -project location-spoofer.xcodeproj \
             -scheme location-spoofer \
-            -archivePath $RUNNER_TEMP/LocationSpoofer.xcarchive \
             -destination "generic/platform=iOS" \
+            -configuration Release \
             CODE_SIGNING_ALLOWED=NO \
-            CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER
+            CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER \
+            -derivedDataPath $RUNNER_TEMP/DerivedData
 
-      - name: Export IPA
+      - name: Package into IPA
         run: |
-          cat > $RUNNER_TEMP/export.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>compileBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <false/>
-            <key>signingStyle</key>
-            <string>automatic</string>
-          </dict>
-          </plist>
-          EOF
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/LocationSpoofer.xcarchive \
-            -exportOptionsPlist $RUNNER_TEMP/export.plist \
-            -exportPath $RUNNER_TEMP/export \
-            -allowProvisioningUpdates
+          mkdir -p $RUNNER_TEMP/Payload
+          APP_PATH=$(find $RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find $RUNNER_TEMP/DerivedData/Build/Products/Debug-iphoneos -name "*.app" | head -n 1)
+          fi
+          echo "Found compiled app at: $APP_PATH"
+          cp -r "$APP_PATH" $RUNNER_TEMP/Payload/
+          
+          mkdir -p $RUNNER_TEMP/export
+          cd $RUNNER_TEMP
+          zip -r LocationSpoofer-Sideloadable.ipa Payload
+          mv LocationSpoofer-Sideloadable.ipa export/
 
       - name: Upload IPA as Artifact
         uses: actions/upload-artifact@v4
